@@ -86,12 +86,26 @@ ifndef BOARD_USERDATAEXTRAIMAGE_PARTITION_NAME
   BOARD_USERDATAEXTRAIMAGE_PARTITION_NAME := extra
 endif
 
+ifeq ($(strip $(TARGET_CUSTOM_DTBTOOL)),)
+DTBTOOL_NAME := dtbToolCM
+else
+DTBTOOL_NAME := $(TARGET_CUSTOM_DTBTOOL)
+endif
+
+DTBTOOL := $(HOST_OUT_EXECUTABLES)/$(DTBTOOL_NAME)$(HOST_EXECUTABLE_SUFFIX)
+
 BUILT_USERDATAEXTRAIMAGE_TARGET := $(PRODUCT_OUT)/userdata_$(BOARD_USERDATAEXTRAIMAGE_PARTITION_NAME).img
 
 define build-userdataextraimage-target
     $(call pretty,"Target EXTRA userdata fs image: $(INSTALLED_USERDATAEXTRAIMAGE_TARGET)")
     @mkdir -p $(TARGET_OUT_DATA)
     $(hide) $(MKEXTUSERIMG) -s $(TARGET_OUT_DATA) $@ ext4 data $(BOARD_USERDATAEXTRAIMAGE_PARTITION_SIZE)
+possible_dtb_dirs = $(KERNEL_OUT)/arch/$(TARGET_KERNEL_ARCH)/boot/dts/ $(KERNEL_OUT)/arch/arm/boot/
+dtb_dir = $(firstword $(wildcard $(possible_dtb_dirs)))
+
+define build-dtimage-target
+    $(call pretty,"Target dt image: $(INSTALLED_DTIMAGE_TARGET)")
+    $(hide) $(DTBTOOL) $(BOARD_DTBTOOL_ARGS) -o $@ -s $(BOARD_KERNEL_PAGESIZE) -p $(KERNEL_OUT)/scripts/dtc/ $(dtb_dir)
     $(hide) chmod a+r $@
     $(hide) $(call assert-max-image-size,$@,$(BOARD_USERDATAEXTRAIMAGE_PARTITION_SIZE),yaffs)
 endef
@@ -99,6 +113,10 @@ endef
 INSTALLED_USERDATAEXTRAIMAGE_TARGET := $(BUILT_USERDATAEXTRAIMAGE_TARGET)
 $(INSTALLED_USERDATAEXTRAIMAGE_TARGET): $(INSTALLED_USERDATAIMAGE_TARGET)
 	$(build-userdataextraimage-target)
+
+$(INSTALLED_DTIMAGE_TARGET): $(DTBTOOL) $(INSTALLED_KERNEL_TARGET)
+	$(build-dtimage-target)
+	@echo -e ${CL_CYN}"Made DT image: $@"${CL_RST}
 
 ALL_DEFAULT_INSTALLED_MODULES += $(INSTALLED_USERDATAEXTRAIMAGE_TARGET)
 ALL_MODULES.$(LOCAL_MODULE).INSTALLED += $(INSTALLED_USERDATAEXTRAIMAGE_TARGET)
